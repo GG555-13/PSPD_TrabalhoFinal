@@ -13,22 +13,92 @@ spec:
       labels:
         app: socket-server
     spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: node.kubernetes.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 300
+      
       containers:
       - name: socket-server
         image: gameoflife/socket-server:latest
-        imagePullPolicy: Never  # Usar imagem local
+        imagePullPolicy: Never
         ports:
         - containerPort: 8080
+        
+        resources:
+          requests:
+            memory: 2Gi
+            cpu: 2000m
+          limits:
+            memory: 8Gi
+            cpu: 4000m
+
         env:
         - name: ELASTICSEARCH_URL
           value: "http://elasticsearch:9200"
-        resources:
-          requests:
-            memory: 256Mi
-            cpu: 250m
-          limits:
-            memory: 512Mi
-            cpu: 500m
+        - name: OMP_NUM_THREADS
+          value: "4"
+        - name: MALLOC_ARENA_MAX
+          value: "2"
+        - name: MALLOC_MMAP_THRESHOLD_
+          value: "131072"
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+            add:
+            - SYS_NICE
+            - IPC_LOCK
+
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: shared-memory
+          mountPath: /dev/shm
+        
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
+      - name: shared-memory
+        emptyDir:
+          medium: Memory
+          sizeLimit: 2Gi
+      
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: DoesNotExist
+
 ---
 apiVersion: v1
 kind: Service
@@ -43,3 +113,31 @@ spec:
     targetPort: 8080
     nodePort: 30080
   type: NodePort
+  
+---
+# HPA OTIMIZADO
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: socket-server-hpa
+  namespace: gameoflife
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: socket-server
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 90

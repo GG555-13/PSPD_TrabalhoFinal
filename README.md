@@ -112,7 +112,6 @@ gcc -o binarios/test_client src/socket/test_client.c
 ./binarios/jogodavida
 
 # Executar versão OpenMP (4 threads)
-export OMP_NUM_THREADS=4
 ./binarios/jogodavida_openmp
 
 # Comparar performances
@@ -578,29 +577,6 @@ kubectl -n kubernetes-dashboard create token admin-user
 ```
 
 **Tempo estimado**: 10-15 minutos para setup completo.
-
---------|------------------|------------------|-----------------|
-| Sequencial | 32x32 (5) | ~2s | Baseline |
-| OpenMP (4 cores) | 32x32 (5) | ~0.5s | Testes rápidos |
-| OpenMP (4 cores) | 64x64 (6) | ~5s | Demo funcional |
-| OpenMP (4 cores) | 128x128 (7) | ~30s | Teste performance |
-| OpenMP (4 cores) | 1024x1024 (10) | **várias horas** | **Não recomendado** |
-
-### Comparação de Escalabilidade
-
-```bash
-# Testar diferentes números de threads (local)
-for threads in 1 2 4 8; do
-    echo "=== Testando com $threads threads ==="
-    export OMP_NUM_THREADS=$threads
-    time ./binarios/jogodavida_openmp
-done
-
-# Testar via socket server (recomendado para testes)
-./binarios/test_client localhost -e openmp -min 3 -max 5 -t 1
-./binarios/test_client localhost -e openmp -min 3 -max 5 -t 4
-./binarios/test_client localhost -e openmp -min 3 -max 5 -t 8
-```
 
 ### Monitoramento de Recursos
 
